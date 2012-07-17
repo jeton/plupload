@@ -222,7 +222,8 @@
 						file_data_name : settings.file_data_name,
 						format : /\.(jpg|jpeg)$/i.test(file.name) ? 'jpg' : 'png',
 						headers : settings.headers,
-						urlstream_upload : settings.urlstream_upload
+						urlstream_upload : settings.urlstream_upload,
+                        send_content_range : settings.send_content_range
 					});
 				});
 				

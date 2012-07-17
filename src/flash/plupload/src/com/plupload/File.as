@@ -47,7 +47,7 @@ package com.plupload {
 		private var _fileRef:FileReference, _urlStream:URLStream, _cancelled:Boolean;
 		private var _uploadUrl:String, _uploadPath:String, _mimeType:String;
 		private var _id:String, _fileName:String, _size:Number, _imageData:ByteArray;
-		private var _multipart:Boolean, _fileDataName:String, _chunking:Boolean, _chunk:int, _chunks:int, _chunkSize:int, _postvars:Object;
+		private var _multipart:Boolean, _fileDataName:String, _chunking:Boolean, _chunk:int, _chunks:int, _chunkSize:int, _postvars:Object, _sendContentRange:Boolean;
 		private var _headers:Object, _settings:Object;
 		private var _removeAllListeners:Function;
 		private var _removeAllURLStreamListeners:Function;
@@ -240,12 +240,13 @@ package com.plupload {
 					file._fileRef.removeEventListener(Event.COMPLETE, onComplete);
 					file._fileRef.removeEventListener(IOErrorEvent.IO_ERROR, onIOError);
 				};
-
+			
 			// Setup internal vars
 			this._uploadUrl = url;
 			this._cancelled = false;
 			this._headers = settings.headers;
 			this._mimeType = settings.mime;
+			this._sendContentRange = new Boolean(settings["send_content_range"]);
 			
 			// make it available for whole class (cancelUpload requires it for example)
 			this._removeAllListeners = removeAllListeners;
@@ -339,7 +340,7 @@ package com.plupload {
 		 * Uploads the next chunk or terminates the upload loop if all chunks are done.
 		 */
 		public function uploadNextChunk():Boolean {
-			var file:File = this, fileData:ByteArray, chunkData:ByteArray, req:URLRequest, url:String;
+			var file:File = this, fileData:ByteArray, chunkData:ByteArray, req:URLRequest, url:String, chunkLength:Number;
 			var onComplete:Function, onIOError:Function, onSecurityError:Function;
 			var removeAllEventListeners:Function = function() : void {
 					file._urlStream.removeEventListener(Event.COMPLETE, onComplete);
@@ -368,8 +369,9 @@ package com.plupload {
 				fileData = this._imageData;
 			else
 				fileData = this._fileRef.data;
-
-			fileData.readBytes(chunkData, 0, fileData.position + this._chunkSize > fileData.length ? fileData.length - fileData.position : this._chunkSize);
+			
+			chunkLength = fileData.position + this._chunkSize > fileData.length ? fileData.length - fileData.position : this._chunkSize;
+			fileData.readBytes(chunkData, 0, chunkLength);
 
 			// Setup URL stream
 			file._urlStream = null;
@@ -486,6 +488,9 @@ package com.plupload {
 				req.data = multipartBlob;
 			} else {
 				req.requestHeaders.push(new URLRequestHeader("Content-Type", "application/octet-stream"));
+				if(file._sendContentRange){
+					req.requestHeaders.push(new URLRequestHeader("X-Content-Range", "bytes "+(fileData.position-chunkLength)+"-"+(fileData.position-1)+"/"+fileData.length));
+				}
 				req.data = chunkData;
 			}
 
