@@ -223,7 +223,8 @@
 						format : /\.(jpg|jpeg)$/i.test(file.name) ? 'jpg' : 'png',
 						headers : settings.headers,
 						urlstream_upload : settings.urlstream_upload,
-                        send_content_range : settings.send_content_range
+                        send_content_range : settings.send_content_range,
+                        nginx_resumable : settings.nginx_resumable
 					});
 				});
 				

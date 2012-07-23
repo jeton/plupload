@@ -47,7 +47,7 @@ package com.plupload {
 		private var _fileRef:FileReference, _urlStream:URLStream, _cancelled:Boolean;
 		private var _uploadUrl:String, _uploadPath:String, _mimeType:String;
 		private var _id:String, _fileName:String, _size:Number, _imageData:ByteArray;
-		private var _multipart:Boolean, _fileDataName:String, _chunking:Boolean, _chunk:int, _chunks:int, _chunkSize:int, _postvars:Object, _sendContentRange:Boolean;
+		private var _multipart:Boolean, _fileDataName:String, _chunking:Boolean, _chunk:int, _chunks:int, _chunkSize:int, _postvars:Object, _sendContentRange:Boolean, _nginxResumable:Boolean;
 		private var _headers:Object, _settings:Object;
 		private var _removeAllListeners:Function;
 		private var _removeAllURLStreamListeners:Function;
@@ -247,6 +247,7 @@ package com.plupload {
 			this._headers = settings.headers;
 			this._mimeType = settings.mime;
 			this._sendContentRange = new Boolean(settings["send_content_range"]);
+			this._nginxResumable = new Boolean(settings["nginx_resumable"]);
 			
 			// make it available for whole class (cancelUpload requires it for example)
 			this._removeAllListeners = removeAllListeners;
@@ -392,8 +393,28 @@ package com.plupload {
 					file._chunk,
 					file._chunks
 				);
-
-				file._chunk++;
+				
+				// NGINX upload module resumable feature
+				var resumed:Boolean = false;
+				if(file._nginxResumable && !file._multipart && file._sendContentRange){
+					var regCheck:RegExp = new RegExp("^[0-9]+-[0-9]+\/[0-9]+$", "g"); //nginx response of servers total content-range recieved from all chunks {bytes start}-{bytes end}/{total bytes}
+					var regResult:Object = regCheck.exec(response);
+					if(regResult){
+						var split1:Array = response.split("-");
+						var split2:Array = String(split1[1]).split("/");
+						var serverPosition:Number = Number(split2[0])+1;
+						if(Number(split1[0])==0){ //resumable uploads in this instance will only work sequentially beginning at the start
+							if(serverPosition>1 && serverPosition%file._chunkSize==0){ //check existing bytes range is in line with chunk size
+								resumed = true;
+								fileData.position = serverPosition;
+								file._chunk = serverPosition/file._chunkSize;
+							}
+						}
+					}
+					file._nginxResumable = false; //only need to run this once per upload
+				}
+				
+				if(!resumed) file._chunk++;
 				dispatchEvent(uploadChunkEvt);
 
 				// Fake progress event since Flash doesn't have a progress event for streaming data up to the server
@@ -401,7 +422,9 @@ package com.plupload {
 				dispatchEvent(pe);
 
 				// Clean up memory
-				file._urlStream.close();
+				try{
+					file._urlStream.close();
+				}catch(er:Error){}
 				removeAllEventListeners();
 				chunkData.clear();
 			};
